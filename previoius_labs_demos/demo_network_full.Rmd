@@ -1,0 +1,235 @@
+## Demo: Create a graph from OBA data, visualize it
+
+Let's load in our OBA data and make a network for all the bumble bees in Oregon. We will need to subset the data, then keep only the bee and plant species columns. 
+
+```{r, load-oba}
+library(networkD3)
+library(igraph)
+library(tidyverse)
+oba <- read.csv("/Users/sydneyjames/Downloads/OBA_2018-2024.csv")
+glimpse(oba)
+```
+
+The entire network would be difficult to visualize, so let's subset the data to just bumble bees. We need to extract only the columns that are relevant for the bee-plant interactions. The column "speciesPlant" has the floral species a bee was caught visiting, if it was caught on a flower.
+
+```{r, subset-obs}
+## subset to only bombus
+bumbles <- oba %>%
+  filter(genus == "Bombus")
+
+## drop rows without species names
+bumbles <- bumbles[bumbles$specificEpithet != "",]
+
+## create a bee genus species column 
+bumbles$GenusSpecies <-  paste(bumbles$genus, bumbles$specificEpithet)
+
+## subset down to just the columns of interest for a network
+bumbles <- bumbles[,c("GenusSpecies","speciesPlant")]
+
+## rename them to something more consistent
+colnames(bumbles) <- c("GenusSpecies", "PlantGensusSpecies")
+```
+
+There are a lot of blank rows from associated taxa for individuals not caught on a flower. We cannot do anything with those so we will just drop them. 
+
+```{r, subset-obs-2}
+bumbles$PlantGensusSpecies[bumbles$PlantGensusSpecies == ""] <- NA
+bumbles <- bumbles %>%
+drop_na(PlantGensusSpecies)
+
+sort(unique(bumbles$PlantGenusSpecies))
+sort(unique(bumbles$GenusSpecies))
+```
+You all are a very lucky class because it previous years there were a ton of terrible looking names.
+
+We can explore the species in our network. These will be the vertices. 
+```{r, explore}
+
+sort(table(bumbles$GenusSpecies))[1:10]
+sort(table(bumbles$PlantGenusSpecies))[1:10]
+```
+We have a variety of options for converting of data (which is basically an edge list) into a graph. One is to sum up our interactions but bee-plant combinations to make an bipartite adjacency matrix. Then convert that matrix to a igraph object. 
+
+```{r, make-adj-1}
+### 1. sum up interactions and take a look
+bumbles_adj <- table(bumbles)
+bumbles_adj <- unclass(bumbles_adj)  
+
+### write to a file
+save(bumbles_adj, file="bumbles_adj_mat.Rdata")
+dim(bumbles_adj)
+bumbles_adj[1:5, 1:5] 
+```
+
+```{r, make-adj-2}
+### 2. convert to igraph bipartite adjacency matrix 
+g_bumbles <- graph_from_biadjacency_matrix(bumbles_adj,
+                                           weighted =TRUE) 
+g_bumbles
+
+```
+
+To use the 'forceNetwork' function to make a beautiful visualization, we need to convert our graph into a dataframe. Luckily there is a function 'igraph_to_networkD3' to convert from graph objects to what the network3d package wants. That function also wants a each vertex assigned to a group. We have a variety of options on how to assign groups, one is to look for modules or compartments in the network. 
+
+```{r, plot-oba}
+### find modules
+mod_bumbles <- cluster_walktrap(g_bumbles)
+### assign vertices to modules
+groups <- membership(mod_bumbles)
+
+### convert to a network 3d object
+g_bumbles_net3d <- igraph_to_networkD3(g_bumbles, group=groups, 
+                                       what = "both")
+### plot the bumble-plant network
+forceNetwork(Links = g_bumbles_net3d$links,
+             Nodes = g_bumbles_net3d$nodes,
+            Source = "source", Target = "target",
+            Value = "value",  NodeID = "name",
+             Group = "group", 
+            opacity = 0.8, zoom=TRUE, opacityNoHover = 0.9)
+```
+
+We can also use a flow-like visualization plot. 
+
+```{r, plot-oba-2}
+
+sankeyNetwork(Links = g_bumbles_net3d$links,
+             Nodes = g_bumbles_net3d$nodes,
+            Source = "source", Target = "target",
+            Value = "value",  NodeID = "name", 
+            nodePadding = 0, height = 5000)
+```
+
+### In class: Visualization challange 1.
+
+Choose a different genus of bees and repeat the steps above to make a network. 
+
+### In class: Visualization challange 2. 
+How could we use graph attributes to create informative network visualizations? Set some attributes and use them to plot your network.
+Consider using static network plots instead of network3D, see this [turorial](https://yunranchen.github.io/intro-net-r/advanced-network-visualization.html#visualization-for-static-network) for examples.  
+
+
+```{r, plot-oba-challange}
+## subset to only osmia
+osmia <- oba %>%
+  filter(genus == "Osmia")
+
+## drop rows without species names
+osmia <- osmia[osmia$specificEpithet != "",]
+
+## create a bee genus species column 
+osmia$GenusSpecies <-  paste(osmia$genus, osmia$specificEpithet)
+
+## subset down to just the columns of interest for a network
+osmia <- osmia[,c("GenusSpecies","speciesPlant")]
+
+## rename them to something more consistent
+colnames(osmia) <- c("GenusSpecies", "PlantGensusSpecies")
+
+osmia$PlantGensusSpecies[osmia$PlantGensusSpecies == ""] <- NA
+osmia <- osmia %>%
+drop_na(PlantGensusSpecies)
+
+sort(unique(osmia$PlantGenusSpecies))
+sort(unique(osmia$GenusSpecies))
+
+
+sort(table(osmia$GenusSpecies))[1:10]
+sort(table(osmia$PlantGenusSpecies))[1:10]
+
+### 1. sum up interactions and take a look
+osmia_adj <- table(osmia)
+osmia_adj <- unclass(osmia_adj)  
+
+### write to a file
+save(osmia_adj, file="osmia_adj_mat.Rdata")
+dim(osmia_adj)
+osmia_adj[1:5, 1:5] 
+
+### 2. convert to igraph bipartite adjacency matrix 
+g_osmia <- graph_from_biadjacency_matrix(osmia_adj,
+                                           weighted =TRUE) 
+g_osmia
+
+### find modules
+mod_osmia <- cluster_walktrap(g_osmia)
+### assign vertices to modules
+groups <- membership(mod_osmia)
+
+### convert to a network 3d object
+g_osmia_net3d <- igraph_to_networkD3(g_osmia, group=groups, 
+                                       what = "both")
+### plot the osmia-plant network
+forceNetwork(Links = g_osmia_net3d$links,
+             Nodes = g_osmia_net3d$nodes,
+            Source = "source", Target = "target",
+            Value = "value",  NodeID = "name",
+             Group = "group", 
+            opacity = 0.8, zoom=TRUE, opacityNoHover = 0.9)
+
+sankeyNetwork(Links = g_osmia_net3d$links,
+             Nodes = g_osmia_net3d$nodes,
+            Source = "source", Target = "target",
+            Value = "value",  NodeID = "name", 
+            nodePadding = 0, height = 5000)
+```
+``` {r}
+osmia_lignaria <- oba %>%
+  filter(genus == "Osmia" & specificEpithet == "lignaria")
+
+## create a bee genus species column 
+osmia_lignaria$GenusSpecies <-  paste(osmia_lignaria$genus, osmia_lignaria$specificEpithet)
+
+## subset down to just the columns of interest for a network
+osmia_lignaria <- osmia_lignaria[,c("GenusSpecies","speciesPlant")]
+
+## rename them to something more consistent
+colnames(osmia_lignaria) <- c("GenusSpecies", "PlantGensusSpecies")
+
+osmia_lignaria$PlantGensusSpecies[osmia_lignaria$PlantGensusSpecies == ""] <- NA
+osmia_lignaria <- osmia_lignaria %>%
+drop_na(PlantGensusSpecies)
+
+sort(unique(osmia_lignaria$PlantGenusSpecies))
+sort(unique(osmia_lignaria$GenusSpecies))
+
+
+sort(table(osmia_lignaria$GenusSpecies))[1:10]
+sort(table(osmia_lignaria$PlantGenusSpecies))[1:10]
+
+### 1. sum up interactions and take a look
+osmia_lignaria_adj <- table(osmia_lignaria)
+osmia_lignaria_adj <- unclass(osmia_lignaria_adj)  
+
+### write to a file
+save(osmia_lignaria_adj, file="osmia_lignaria_adj_mat.Rdata")
+dim(osmia_lignaria_adj)
+osmia_lignaria_adj[1, 1:5] 
+
+### 2. convert to igraph bipartite adjacency matrix 
+g_osmia_lignaria <- graph_from_biadjacency_matrix(osmia_lignaria_adj,
+                                           weighted =TRUE) 
+g_osmia_lignaria
+
+### find modules
+mod_osmia_lignaria <- cluster_walktrap(g_osmia_lignaria)
+### assign vertices to modules
+groups <- membership(mod_osmia_lignaria)
+
+### convert to a network 3d object
+g_osmia_lignaria_net3d <- igraph_to_networkD3(g_osmia_lignaria, group=groups, 
+                                       what = "both")
+### plot the osmia-plant network
+forceNetwork(Links = g_osmia_lignaria_net3d$links,
+             Nodes = g_osmia_lignaria_net3d$nodes,
+            Source = "source", Target = "target",
+            Value = "value",  NodeID = "name",
+             Group = "group", 
+            opacity = 0.8, zoom=TRUE, opacityNoHover = 0.9)
+
+sankeyNetwork(Links = g_osmia_lignaria_net3d$links,
+             Nodes = g_osmia_lignaria_net3d$nodes,
+            Source = "source", Target = "target",
+            Value = "value",  NodeID = "name", 
+            nodePadding = 0, height = 5000)
+```
